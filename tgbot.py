@@ -23,14 +23,31 @@ WITHDRAW_URL = "https://backofficewebadmin.betconstruct.com/api/en/Client/GetCli
 CLIENT_INFO_URL = "https://backofficewebadmin.betconstruct.com/api/en/Client/GetClients"
 
 
-# ============================================================================
-#  KULLANICI ADINDAN CLIENT ID BULAN FONKSİYON
-# ============================================================================
-def fetch_client_id_by_name(first, last):
+# ===================================================================
+#  LOGIN İLE CLIENT BİLGİSİ ALMA
+# ===================================================================
+def fetch_client_by_login(login):
     body = {
-        "FirstName": first,
-        "LastName": last,
-        "MaxRows": 50
+        "Id": "",
+        "FirstName": "",
+        "LastName": "",
+        "MiddleName": "",
+        "Login": login,
+        "PersonalId": "",
+        "Email": "",
+        "Phone": "",
+        "MobilePhone": "",
+        "ZipCode": None,
+        "City": "",
+        "RegionId": None,
+        "CurrencyId": None,
+        "IsTest": None,
+        "IsStartWithSearch": False,
+        "IsOrderedDesc": True,
+        "MaxRows": 20,
+        "OrderedItem": 1,
+        "MinCreatedLocalDisable": True,
+        "MaxCreatedLocalDisable": True
     }
 
     try:
@@ -38,48 +55,20 @@ def fetch_client_id_by_name(first, last):
         r.raise_for_status()
         data = r.json()
 
-        clients = data.get("Data", {}).get("Objects", [])
-
-        if not clients:
+        users = data.get("Data", {}).get("Objects", [])
+        if not users:
             return None
 
-        return clients[0].get("Id")
+        return users[0]  # tüm kullanıcı bilgilerini döndürür
 
-    except Exception:
+    except Exception as e:
+        print(f"Hata: {e}")
         return None
 
 
-# ============================================================================
-#  OYUNCU ADI GETİREN FONKSİYON
-# ============================================================================
-def fetch_user_name(client_id):
-    body = {"Id": str(client_id), "MaxRows": 1}
-
-    try:
-        r = requests.post(CLIENT_INFO_URL, headers=HEADERS, json=body)
-        r.raise_for_status()
-        data = r.json()
-
-        c = data.get("Data", {}).get("Objects", [])
-        if not c:
-            return "Bilinmiyor"
-
-        c = c[0]
-
-        first = c.get("FirstName", "")
-        last = c.get("LastName", "")
-        login = c.get("ClientLogin", "")
-
-        full = f"{first} {last}".strip()
-        return full if full else login
-
-    except:
-        return "Bilinmiyor"
-
-
-# ============================================================================
+# ===================================================================
 #  TARİH İŞLEMLERİ
-# ============================================================================
+# ===================================================================
 def parse_date(date_str):
     return datetime.strptime(date_str, "%d-%m-%y")
 
@@ -94,9 +83,9 @@ def split_date_range(start, end, chunk_days=90):
     return result
 
 
-# ============================================================================
+# ===================================================================
 #  DEPOSIT ÇEKME
-# ============================================================================
+# ===================================================================
 def fetch_deposits(client_id, start, end):
     body = {
         "ClientId": client_id,
@@ -124,9 +113,9 @@ def fetch_deposits(client_id, start, end):
         return [], f"Hata: {e}"
 
 
-# ============================================================================
+# ===================================================================
 #  WITHDRAW ÇEKME
-# ============================================================================
+# ===================================================================
 def fetch_withdrawals(client_id, start, end):
     body = {
         "ClientId": client_id,
@@ -148,32 +137,34 @@ def fetch_withdrawals(client_id, start, end):
         return [], f"Hata: {e}"
 
 
-# ============================================================================
+# ===================================================================
 #  TELEGRAM MESAJ HANDLER
-# ============================================================================
+# ===================================================================
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     text = update.message.text.strip()
     parts = text.split()
 
     # Format kontrol
-    if len(parts) < 4:
+    if len(parts) < 3:
         await update.message.reply_text(
-            "❗ Format hatalı!\nÖrnek: `cengizz cagin 18-07-25 18-11-25`"
+            "❗ Format hatalı!\nÖrnek: `kullanıcıadı 18-07-25 18-11-25`"
         )
         return
 
-    first, last = parts[0], parts[1]
-    start_date = parse_date(parts[2])
-    end_date = parse_date(parts[3])
+    login = parts[0]
+    start_date = parse_date(parts[1])
+    end_date = parse_date(parts[2])
 
-    # Client ID bul
-    client_id = fetch_client_id_by_name(first, last)
-    if not client_id:
-        await update.message.reply_text("❗ Oyuncu bulunamadı!")
+    # Kullanıcı bilgilerini al
+    user = fetch_client_by_login(login)
+    if not user:
+        await update.message.reply_text("❗ Kullanıcı bulunamadı!")
         return
 
-    # İsim al
-    user_name = fetch_user_name(client_id)
+    client_id = user.get("Id")
+    user_name = f"{user.get('FirstName', '')} {user.get('LastName', '')}".strip()
+    if not user_name:
+        user_name = user.get("Login", "Bilinmiyor")
 
     # Yatırımlar
     chunks = split_date_range(start_date, end_date)
@@ -205,9 +196,9 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(msg, parse_mode="Markdown")
 
 
-# ============================================================================
+# ===================================================================
 #  BOT BAŞLAT
-# ============================================================================
+# ===================================================================
 app = ApplicationBuilder().token(TELEGRAM_TOKEN).build()
 app.add_handler(MessageHandler(filters.TEXT & (~filters.COMMAND), handle_message))
 
