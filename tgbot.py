@@ -152,9 +152,12 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     login = parts[0]
-    start_date = parse_date(parts[1])
-    end_date = parse_date(parts[2])
-
+    try:
+        start_date = parse_date(parts[1])
+        end_date = parse_date(parts[2])
+    except ValueError:
+        await update.message.reply_text("❗ HATALI SORGU")
+        return
     # Kullanıcı bilgilerini al
     user = fetch_client_by_login(login)
     if not user:
